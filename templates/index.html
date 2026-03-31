@@ -189,6 +189,101 @@
       transition: all 0.2s;
     }
     .chip:hover { background: #c0392b; color: white; }
+
+    /* Plan My Night mode banner */
+    #plan-banner {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: #1a1a2e;
+      color: #e0c97f;
+      padding: 10px 16px;
+      font-size: 0.88rem;
+      flex-shrink: 0;
+    }
+    #plan-banner.active { display: flex; }
+    #plan-banner button {
+      margin-left: auto;
+      background: none;
+      border: 1px solid #e0c97f;
+      color: #e0c97f;
+      border-radius: 12px;
+      padding: 3px 10px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    /* Itinerary timeline card */
+    .itinerary-card {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.13);
+      overflow: hidden;
+      width: 100%;
+      max-width: 480px;
+    }
+    .itinerary-header {
+      background: #1a1a2e;
+      color: #e0c97f;
+      padding: 14px 18px;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .itinerary-step {
+      padding: 14px 18px;
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+    .itinerary-step + .itinerary-step {
+      border-top: 1px solid #f0f0f0;
+    }
+    .step-left {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 54px;
+    }
+    .step-time {
+      font-size: 0.72rem;
+      color: #999;
+      white-space: nowrap;
+    }
+    .step-emoji {
+      font-size: 1.6rem;
+      margin: 4px 0 2px;
+    }
+    .step-body { flex: 1; }
+    .step-category {
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      color: #c0392b;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .step-name {
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #1a1a1a;
+    }
+    .step-meta {
+      font-size: 0.78rem;
+      color: #666;
+      margin-top: 3px;
+    }
+    .step-address {
+      font-size: 0.75rem;
+      color: #888;
+      margin-top: 2px;
+    }
+    .step-ambience {
+      font-size: 0.73rem;
+      color: #888;
+      margin-top: 2px;
+      font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -198,12 +293,18 @@
     <div class="message bot">Hey! I can help you find great restaurants in Philadelphia. What are you in the mood for?</div>
   </div>
 
+  <div id="plan-banner">
+    🌙 <strong>Plan My Night mode</strong> — describe your vibe and I'll find dinner, drinks &amp; dessert near each other.
+    <button onclick="exitPlanMode()">✕ Exit</button>
+  </div>
+
   <div class="suggestions">
     <div class="chip" onclick="sendChip(this)">Best pizza spots</div>
     <div class="chip" onclick="sendChip(this)">Cheap sushi</div>
     <div class="chip" onclick="sendChip(this)">Top rated brunch</div>
     <div class="chip" onclick="sendChip(this)">Vegan options</div>
     <div class="chip" onclick="sendChip(this)">Best cheesesteaks</div>
+    <div class="chip" style="background:#1a1a2e;color:#e0c97f;border-color:#1a1a2e;" onclick="enterPlanMode()">🌙 Plan My Night</div>
   </div>
 
   <div id="input-row">
@@ -216,11 +317,26 @@
     const input = document.getElementById("msg");
     const btn   = document.getElementById("send-btn");
 
+    let planMode = false;
+
     input.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
 
     function sendChip(el) {
       input.value = el.textContent;
       sendMessage();
+    }
+
+    function enterPlanMode() {
+      planMode = true;
+      document.getElementById("plan-banner").classList.add("active");
+      input.placeholder = "e.g. romantic date night, birthday celebration, casual Friday out...";
+      input.focus();
+    }
+
+    function exitPlanMode() {
+      planMode = false;
+      document.getElementById("plan-banner").classList.remove("active");
+      input.placeholder = "e.g. best ramen under 4 stars...";
     }
 
     function renderStars(stars) {
@@ -328,6 +444,49 @@
       chat.scrollTop = chat.scrollHeight;
     }
 
+    function addItinerary(data) {
+      if (!data.steps || data.steps.length === 0) {
+        addMessage("Couldn't build an itinerary for that vibe. Try being more specific!", "bot");
+        return;
+      }
+
+      const card = document.createElement("div");
+      card.className = "itinerary-card";
+
+      const header = document.createElement("div");
+      header.className = "itinerary-header";
+      header.textContent = "🌙 Your Evening Plan";
+      card.appendChild(header);
+
+      for (const step of data.steps) {
+        const r = step.restaurant || {};
+        const stars = parseFloat(r.stars) || 0;
+        const price = r.price_range || "";
+        const ambience = r.ambience || "";
+        const noise = r.noise_level ? `· ${r.noise_level} noise` : "";
+
+        const div = document.createElement("div");
+        div.className = "itinerary-step";
+        div.innerHTML = `
+          <div class="step-left">
+            <div class="step-time">${step.time}</div>
+            <div class="step-emoji">${step.emoji}</div>
+          </div>
+          <div class="step-body">
+            <div class="step-category">${step.category}</div>
+            <div class="step-name">${r.name || "—"}</div>
+            <div class="step-meta">${renderStars(stars)} ${stars.toFixed(1)} &nbsp;${price ? `· ${price}` : ""} ${noise}</div>
+            <div class="step-address">📍 ${r.address || ""}</div>
+            ${ambience ? `<div class="step-ambience">✨ ${ambience}</div>` : ""}
+          </div>
+        `;
+        card.appendChild(div);
+      }
+
+      chat.appendChild(card);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
     async function sendMessage() {
       const text = input.value.trim();
       if (!text) return;
@@ -335,10 +494,11 @@
       input.value = "";
       btn.disabled = true;
       addMessage(text, "user");
-      const thinking = addMessage("Thinking...", "bot thinking");
+      const thinking = addMessage(planMode ? "Planning your night..." : "Thinking...", "bot thinking");
 
       try {
-        const res = await fetch("/chat", {
+        const endpoint = planMode ? "/plan" : "/chat";
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ message: text })
@@ -348,6 +508,8 @@
 
         if (data.error) {
           addMessage(data.error, "bot");
+        } else if (planMode) {
+          addItinerary(data);
         } else {
           addMessage(data.reply, "bot");
           addRestaurantCards(data.restaurants);
