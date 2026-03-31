@@ -1,4 +1,5 @@
 import os
+import math
 from langchain_core.tools import tool
 from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -84,6 +85,69 @@ def search_restaurants_raw(query: str) -> list:
     if not response.data or not response.data[0].rows:
         return []
     return list(response.data[0].rows[:8])
+
+
+def _haversine(lat1, lon1, lat2, lon2):
+    """Distance in miles between two lat/lon points."""
+    R = 3959
+    p = math.pi / 180
+    a = (0.5 - math.cos((lat2 - lat1) * p) / 2
+         + math.cos(lat1 * p) * math.cos(lat2 * p) * (1 - math.cos((lon2 - lon1) * p)) / 2)
+    return R * 2 * math.asin(math.sqrt(a))
+
+
+def _retrieve(query):
+    client = get_client()
+    response = client.retrieve(
+        datafile_id=os.getenv("SNOWLEOPARD_DATAFILE_ID"),
+        user_query=query
+    )
+    if response.responseStatus != "SUCCESS" or not response.data or not response.data[0].rows:
+        return []
+    return response.data[0].rows
+
+
+def _nearest(rows, lat, lon):
+    """Return the row closest to lat/lon, ignoring rows missing coordinates."""
+    def dist(r):
+        try:
+            return _haversine(lat, lon, float(r["latitude"]), float(r["longitude"]))
+        except (TypeError, ValueError, KeyError):
+            return float("inf")
+    return min(rows, key=dist)
+
+
+def plan_night(user_message: str) -> dict:
+    # Step 1: dinner
+    dinner_rows = _retrieve(f"dinner restaurant {user_message}")
+    if not dinner_rows:
+        return {"error": "Couldn't find dinner spots for that vibe."}
+    dinner = dinner_rows[0]
+
+    try:
+        lat = float(dinner["latitude"])
+        lon = float(dinner["longitude"])
+        has_coords = True
+    except (TypeError, ValueError, KeyError):
+        has_coords = False
+
+    # Step 2: cocktail bar / drinks near dinner
+    bar_rows = _retrieve(f"cocktail bar nightlife drinks {user_message}")
+    bar = _nearest(bar_rows, lat, lon) if has_coords and bar_rows else (bar_rows[0] if bar_rows else None)
+
+    # Step 3: dessert near dinner
+    dessert_rows = _retrieve(f"dessert cafe bakery sweets {user_message}")
+    dessert = _nearest(dessert_rows, lat, lon) if has_coords and dessert_rows else (dessert_rows[0] if dessert_rows else None)
+
+    steps = []
+    if dinner:
+        steps.append({"category": "Dinner",  "emoji": "🍽️",  "time": "7:00 PM",  "restaurant": dinner})
+    if bar:
+        steps.append({"category": "Drinks",  "emoji": "🍹",  "time": "9:00 PM",  "restaurant": bar})
+    if dessert:
+        steps.append({"category": "Dessert", "emoji": "🍰", "time": "10:30 PM", "restaurant": dessert})
+
+    return {"steps": steps}
 
 
 def ask(user_message: str) -> str:
