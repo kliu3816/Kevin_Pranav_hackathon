@@ -1,0 +1,19 @@
+# Secrets
+.env
+
+# Large Yelp dataset files
+yelp_academic_dataset_*.json
+yelp_dataset.tar
+
+# Databases
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Claude
+.claude/
